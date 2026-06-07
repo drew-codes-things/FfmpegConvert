@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ffmpeg-converters"
+version = "1.0.0"
+description = "Batch-convert audio, video and image files with ffmpeg."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+ffmpeg-convert = "main:main"
+ffmpeg-audio = "audio:main"
+ffmpeg-video = "video:main"
+ffmpeg-image = "image:main"
+
+[tool.setuptools]
+py-modules = ["main", "common", "audio", "video", "image"]
