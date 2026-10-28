@@ -22,14 +22,6 @@ _SOURCE_MODE = object()
 
 
 def ask_bitrate_mode():
-    """
-    Ask the user to pick a quality level or source-bitrate mode.
-
-    Returns one of:
-      - (_SOURCE_MODE, 18)  when the user picks 's' (near-lossless, CRF 18)
-      - (quality_int, crf)  for a numbered quality choice 1-5
-      - (3, 20)             as the default / fallback
-    """
     print("\nVideo quality:")
     print("  s. Use source bitrate (CRF 18 -- near-lossless)")
     print("  1. Quality 1 -- smallest file  (CRF 28)")
@@ -91,7 +83,6 @@ def parse_args():
 
 
 def resolve_quality(args, log_file):
-    """Determine (use_source, crf) from CLI flags, falling back to the interactive prompt."""
     if args.crf is not None:
         write_log(log_file, f"Bitrate mode: explicit CRF {args.crf}")
         print(f"Using CRF {args.crf}.")

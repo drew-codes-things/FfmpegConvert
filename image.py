@@ -19,7 +19,6 @@ INPUT_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".gif",
 
 
 def build_cmd_factory(quality):
-    """Return a build_cmd. `quality` is 1-100 (higher = better), or None for codec defaults."""
     def build_cmd(ffmpeg_path, input_file, output_file):
         ext = os.path.splitext(output_file)[1].lstrip(".")
         codec = FORMATS[ext]

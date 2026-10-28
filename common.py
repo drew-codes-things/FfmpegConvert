@@ -1,4 +1,3 @@
-"""Shared utilities used by audio.py, video.py, and image.py."""
 import os
 import shlex
 import shutil
@@ -25,7 +24,6 @@ def clean_path(path):
 
 
 def find_ffmpeg(script_dir):
-    """Look for ffmpeg bundled next to the script, then fall back to PATH."""
     candidates = [
         os.path.join(script_dir, "ffmpeg", "ffmpeg.exe"),
         os.path.join(script_dir, "ffmpeg", "ffmpeg"),
@@ -48,7 +46,6 @@ def init_log(path, title):
 
 
 def format_size(num_bytes):
-    """Human-readable file size."""
     for unit in ("B", "KB", "MB", "GB"):
         if num_bytes < 1024:
             return f"{num_bytes:.1f} {unit}"
@@ -57,7 +54,6 @@ def format_size(num_bytes):
 
 
 def print_size_estimate(files, input_folder):
-    """Print total input size and a rough estimated output size before converting."""
     total_bytes = sum(
         os.path.getsize(os.path.join(input_folder, f))
         for f in files
@@ -79,7 +75,6 @@ def print_progress(current, total, filename):
 
 
 def get_files(folder, extensions, recursive=False):
-    """List matching files. With recursive=True, returns paths relative to `folder`."""
     files = []
     if recursive:
         for root, _, names in os.walk(folder):
@@ -95,11 +90,6 @@ def get_files(folder, extensions, recursive=False):
 
 
 def validate_io_folders(input_folder, output_folder):
-    """Validate input/output folder paths and create output if needed.
-
-    Returns (input_folder, output_folder), or (None, None) on any problem.
-    Shared by interactive (prompt_folders) and CLI flag entry points.
-    """
     input_folder = clean_path(input_folder)
     output_folder = clean_path(output_folder)
     if not os.path.isdir(input_folder):
@@ -133,7 +123,6 @@ def validate_io_folders(input_folder, output_folder):
 
 
 def prompt_folders(output_folder_override=None):
-    """Ask for input/output folders, validate, create output if needed."""
     input_folder = input("Input folder path: ")
     if output_folder_override:
         output_folder = output_folder_override
@@ -144,7 +133,6 @@ def prompt_folders(output_folder_override=None):
 
 
 def pick_format(formats, log_file):
-    """Print numbered format list and return chosen key, or None on bad input."""
     keys = list(formats.keys())
     print("\nAvailable output formats:")
     for i, k in enumerate(keys, 1):
@@ -162,11 +150,12 @@ def pick_format(formats, log_file):
         return None
 
 
-def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=False):
-    """Show estimated output size, then run ffmpeg on every file.
+def remove_partial_output(output_file):
+    if os.path.exists(output_file):
+        os.remove(output_file)
 
-    With dry_run=True, prints the ffmpeg command for each file instead of running it.
-    """
+
+def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=False):
     print_size_estimate(files, input_folder)
 
     total = len(files)
@@ -202,7 +191,9 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
 
         cmd = build_cmd(ffmpeg_path, input_file, output_file)
         try:
-            result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(
+                cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
             stderr_text = result.stderr.decode("utf-8", errors="replace").strip()
             if stderr_text:
                 write_log(log_file, stderr_text)
@@ -211,9 +202,15 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
         except subprocess.CalledProcessError as e:
             err = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
             write_log(log_file, f"[{idx}/{total}] ERROR:\n{err}\n")
+            remove_partial_output(output_file)
             failed.append(filename)
+        except KeyboardInterrupt:
+            remove_partial_output(output_file)
+            write_log(log_file, f"[{idx}/{total}] INTERRUPTED\n")
+            raise
         except Exception as e:
             write_log(log_file, f"[{idx}/{total}] UNEXPECTED: {e}\n")
+            remove_partial_output(output_file)
             failed.append(filename)
 
     if dry_run:

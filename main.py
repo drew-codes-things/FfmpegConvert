@@ -1,4 +1,3 @@
-"""Unified entry point for all three converters."""
 import sys
 
 
