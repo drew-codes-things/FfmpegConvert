@@ -3,7 +3,8 @@ import sys
 import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
-    get_files, pick_format, run_batch, validate_io_folders
+    get_files, pick_format, run_batch, validate_io_folders,
+    add_batch_arguments, apply_preset
 )
 
 FORMATS = {
@@ -19,6 +20,12 @@ FORMATS = {
 FORMAT_KEYS = list(FORMATS.keys())
 
 INPUT_EXTS = {".flac", ".mp3", ".wav", ".aac", ".opus", ".m4a", ".wma", ".ogg", ".m4b"}
+
+PRESETS = {
+    "lossless": {"format": "flac"},
+    "portable": {"format": "mp3"},
+    "small":    {"format": "opus"},
+}
 
 
 def build_cmd(ffmpeg_path, input_file, output_file):
@@ -54,11 +61,8 @@ def parse_args():
     p.add_argument("-f", "--format", default=None,
                    choices=FORMAT_KEYS,
                    help=f"Output format: {', '.join(FORMAT_KEYS)} (skips interactive prompt)")
-    p.add_argument("--recursive", action="store_true",
-                   help="Recurse into subfolders (output mirrors the input tree)")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print the ffmpeg commands that would run, without converting")
-    return p.parse_args()
+    add_batch_arguments(p, PRESETS)
+    return apply_preset(p.parse_args(), PRESETS)
 
 
 def main():
@@ -99,7 +103,8 @@ def main():
         if not output_ext:
             sys.exit(1)
 
-    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=args.dry_run)
+    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
+              dry_run=args.dry_run, jobs=args.jobs)
 
 
 if __name__ == "__main__":

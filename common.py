@@ -1,8 +1,10 @@
+import argparse
 import os
 import shlex
 import shutil
 import subprocess
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 import logging
@@ -155,68 +157,141 @@ def remove_partial_output(output_file):
         os.remove(output_file)
 
 
-def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=False):
-    print_size_estimate(files, input_folder)
+def add_batch_arguments(parser, presets):
+    parser.add_argument("--preset", default=None, choices=list(presets),
+                        help="Named settings: " + "; ".join(f"{name} = {describe_preset(values)}"
+                                                            for name, values in presets.items())
+                        + ". Flags you pass yourself win over the preset")
+    parser.add_argument("-j", "--jobs", type=positive_int, default=1,
+                        help="How many files to convert at the same time (default: 1)")
+    parser.add_argument("--recursive", action="store_true",
+                        help="Recurse into subfolders (output mirrors the input tree)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print the ffmpeg commands that would run, without converting")
 
-    total = len(files)
-    ok = 0
-    skipped = 0
-    failed = []
 
-    for idx, filename in enumerate(files, 1):
-        input_file = os.path.join(input_folder, filename)
+def positive_int(text):
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' is not a whole number")
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return value
+
+
+def describe_preset(values):
+    return ", ".join(f"{key} {value}" for key, value in values.items())
+
+
+def apply_preset(args, presets):
+    if not args.preset:
+        return args
+    for key, value in presets[args.preset].items():
+        if getattr(args, key) is None:
+            setattr(args, key, value)
+    print(f"Preset: {args.preset} ({describe_preset(presets[args.preset])})")
+    return args
+
+
+def plan_jobs(files, input_folder, output_folder, output_ext):
+    jobs = []
+    for filename in files:
         base = os.path.splitext(filename)[0]
-        output_file = os.path.join(output_folder, base + "." + output_ext)
+        jobs.append((filename, os.path.join(input_folder, filename),
+                     os.path.join(output_folder, base + "." + output_ext)))
+    return jobs
 
-        if dry_run:
-            cmd = build_cmd(ffmpeg_path, input_file, output_file)
-            line = " ".join(shlex.quote(c) for c in cmd)
-            print(f"[{idx}/{total}] {line}")
-            write_log(log_file, f"[{idx}/{total}] DRY-RUN: {line}")
+
+def convert_one(cmd):
+    result = subprocess.run(
+        cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    return result.stderr.decode("utf-8", errors="replace").strip()
+
+
+def print_dry_run(ffmpeg_path, build_cmd, jobs, log_file):
+    total = len(jobs)
+    for idx, (_, input_file, output_file) in enumerate(jobs, 1):
+        line = " ".join(shlex.quote(c) for c in build_cmd(ffmpeg_path, input_file, output_file))
+        print(f"[{idx}/{total}] {line}")
+        write_log(log_file, f"[{idx}/{total}] DRY-RUN: {line}")
+    print(f"\nDry run: {total} command(s) printed above. Nothing was converted.")
+    write_log(log_file, f"\nDry run: {total} command(s) printed. Nothing converted.")
+
+
+def split_existing(jobs, log_file):
+    pending = []
+    skipped = 0
+    for filename, input_file, output_file in jobs:
+        if os.path.exists(output_file):
+            write_log(log_file, f"SKIPPED (output already exists): {output_file}")
+            skipped += 1
             continue
-
         out_dir = os.path.dirname(output_file)
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
+        pending.append((filename, input_file, output_file))
+    return pending, skipped
 
-        if os.path.exists(output_file):
-            skip_reason = "output already exists"
-            write_log(log_file, f"[{idx}/{total}] SKIPPED ({skip_reason}): {output_file}")
-            print_progress(idx, total, filename + f" [skip -- {skip_reason}]")
-            skipped += 1
-            continue
 
-        print_progress(idx, total, filename)
-        write_log(log_file, f"[{idx}/{total}] {input_file} -> {output_file}")
+def record_result(future, done, total, output_file, log_file):
+    try:
+        stderr_text = future.result()
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
+        write_log(log_file, f"[{done}/{total}] ERROR:\n{err}\n")
+        remove_partial_output(output_file)
+        return False
+    except Exception as e:
+        write_log(log_file, f"[{done}/{total}] UNEXPECTED: {e}\n")
+        remove_partial_output(output_file)
+        return False
+    if stderr_text:
+        write_log(log_file, stderr_text)
+    write_log(log_file, f"[{done}/{total}] OK\n")
+    return True
 
-        cmd = build_cmd(ffmpeg_path, input_file, output_file)
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stderr_text = result.stderr.decode("utf-8", errors="replace").strip()
-            if stderr_text:
-                write_log(log_file, stderr_text)
-            write_log(log_file, f"[{idx}/{total}] OK\n")
-            ok += 1
-        except subprocess.CalledProcessError as e:
-            err = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
-            write_log(log_file, f"[{idx}/{total}] ERROR:\n{err}\n")
-            remove_partial_output(output_file)
-            failed.append(filename)
-        except KeyboardInterrupt:
-            remove_partial_output(output_file)
-            write_log(log_file, f"[{idx}/{total}] INTERRUPTED\n")
-            raise
-        except Exception as e:
-            write_log(log_file, f"[{idx}/{total}] UNEXPECTED: {e}\n")
-            remove_partial_output(output_file)
-            failed.append(filename)
 
+def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
+              dry_run=False, jobs=1):
+    print_size_estimate(files, input_folder)
+    planned = plan_jobs(files, input_folder, output_folder, output_ext)
     if dry_run:
-        print(f"\nDry run: {total} command(s) printed above. Nothing was converted.")
-        write_log(log_file, f"\nDry run: {total} command(s) printed. Nothing converted.")
+        print_dry_run(ffmpeg_path, build_cmd, planned, log_file)
         return
+
+    pending, skipped = split_existing(planned, log_file)
+    total = len(pending)
+    failed = []
+    if skipped:
+        print(f"Skipping {skipped} file(s) whose output already exists.")
+
+    results = {}
+    pool = ThreadPoolExecutor(max_workers=jobs)
+    running = {}
+    for job in pending:
+        _, input_file, output_file = job
+        running[pool.submit(convert_one, build_cmd(ffmpeg_path, input_file, output_file))] = job
+    try:
+        for done, future in enumerate(as_completed(running), 1):
+            filename, input_file, output_file = running[future]
+            print_progress(done, total, filename)
+            write_log(log_file, f"[{done}/{total}] {input_file} -> {output_file}")
+            results[future] = record_result(future, done, total, output_file, log_file)
+            if not results[future]:
+                failed.append(filename)
+    except KeyboardInterrupt:
+        for future in running:
+            future.cancel()
+        pool.shutdown(wait=True)
+        for future, (_, _, output_file) in running.items():
+            if not results.get(future):
+                remove_partial_output(output_file)
+        write_log(log_file, "INTERRUPTED\n")
+        raise
+    pool.shutdown(wait=True)
+    ok = sum(1 for succeeded in results.values() if succeeded)
 
     print()
     print(f"\nDone. {ok} converted, {skipped} skipped (already existed), {len(failed)} failed.")

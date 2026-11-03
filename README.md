@@ -131,10 +131,43 @@ All three scripts share these flags:
 |------|-------------|
 | `--recursive` | Recurse into subfolders; the output mirrors the input folder tree |
 | `--dry-run` | Print the exact ffmpeg command for each file without converting anything |
+| `-j`, `--jobs <n>` | Convert `n` files at the same time (default 1). Ctrl+C stops every running job and removes their half-written outputs |
+| `--preset <name>` | Use a named group of settings; any flag you pass yourself still wins |
 
-`video.py` adds `--crf <n>` (exact CRF, overrides preset) and `--quality s|1-5`.
+### Presets
+
+| Script | Preset | Settings |
+|--------|--------|----------|
+| `audio.py` | `lossless` | flac |
+| `audio.py` | `portable` | mp3 |
+| `audio.py` | `small` | opus |
+| `video.py` | `phone` | mp4, quality 2 (CRF 24) |
+| `video.py` | `discord` | mp4, quality 1 (CRF 28) |
+| `video.py` | `web` | webm, quality 1 (CRF 28) |
+| `video.py` | `archive` | mkv, quality 4 (CRF 18) |
+| `image.py` | `web` | webp, quality 80 |
+| `image.py` | `photo` | jpg, quality 90 |
+| `image.py` | `archive` | png |
+
+```bash
+python video.py -i ~/Videos/raw -o ~/Videos/phone --preset phone -j 2
+python image.py -i ~/Pictures -o ~/web --preset web --quality 70
+```
+
+Video encoding already uses several CPU cores per file, so `-j 2` is usually enough there; audio and image batches benefit from higher values.
+
+`video.py` adds `--crf <n>` (exact CRF, overrides `--quality` and presets) and `--quality s|1-5`.
 `image.py` adds `--quality 1-100` (higher = better) for `jpg`/`webp`/`avif`; lossless formats ignore it.
 `audio.py`, `video.py`, and `image.py` all accept `-i/--input`, `-o/--output`, and `-f/--format` to skip the prompts.
+
+### Tests
+
+```bash
+pip install pytest
+python -m pytest tests
+```
+
+One test runs real ffmpeg and is skipped when ffmpeg isn't installed.
 
 ---
 

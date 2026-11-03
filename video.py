@@ -3,7 +3,8 @@ import sys
 import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
-    get_files, pick_format, run_batch, validate_io_folders
+    get_files, pick_format, run_batch, validate_io_folders,
+    add_batch_arguments, apply_preset
 )
 
 FORMATS = {
@@ -15,6 +16,13 @@ FORMATS = {
 }
 
 INPUT_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".vob"}
+
+PRESETS = {
+    "phone":   {"format": "mp4",  "quality": "2"},
+    "discord": {"format": "mp4",  "quality": "1"},
+    "web":     {"format": "webm", "quality": "1"},
+    "archive": {"format": "mkv",  "quality": "4"},
+}
 
 CRF_MAP = {1: 28, 2: 24, 3: 20, 4: 18, 5: 16}
 
@@ -75,11 +83,8 @@ def parse_args():
                    help="Exact CRF value to use (lower = higher quality); overrides --quality")
     p.add_argument("--quality", default=None,
                    help="Quality preset: s (source/near-lossless) or 1-5 (skips prompt)")
-    p.add_argument("--recursive", action="store_true",
-                   help="Recurse into subfolders (output mirrors the input tree)")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print the ffmpeg commands that would run, without converting")
-    return p.parse_args()
+    add_batch_arguments(p, PRESETS)
+    return apply_preset(p.parse_args(), PRESETS)
 
 
 def resolve_quality(args, log_file):
@@ -151,7 +156,8 @@ def main():
     use_source, crf = resolve_quality(args, log_file)
 
     build_cmd = build_cmd_factory(use_source, crf)
-    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=args.dry_run)
+    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
+              dry_run=args.dry_run, jobs=args.jobs)
 
 
 if __name__ == "__main__":

@@ -19,3 +19,6 @@ ffmpeg-image = "image:main"
 
 [tool.setuptools]
 py-modules = ["main", "common", "audio", "video", "image"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

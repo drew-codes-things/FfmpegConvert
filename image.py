@@ -3,7 +3,8 @@ import sys
 import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
-    get_files, pick_format, run_batch, validate_io_folders
+    get_files, pick_format, run_batch, validate_io_folders,
+    add_batch_arguments, apply_preset
 )
 
 FORMATS = {
@@ -16,6 +17,12 @@ FORMATS = {
 }
 
 INPUT_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".gif", ".ppm", ".tga", ".avif"}
+
+PRESETS = {
+    "web":     {"format": "webp", "quality": 80},
+    "photo":   {"format": "jpg",  "quality": 90},
+    "archive": {"format": "png"},
+}
 
 
 def build_cmd_factory(quality):
@@ -45,11 +52,8 @@ def parse_args():
                    help=f"Output format: {', '.join(FORMATS.keys())} (skips prompt)")
     p.add_argument("--quality", type=int, default=None,
                    help="Quality 1-100 (higher = better) for jpg/webp/avif; lossless formats ignore it")
-    p.add_argument("--recursive", action="store_true",
-                   help="Recurse into subfolders (output mirrors the input tree)")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print the ffmpeg commands that would run, without converting")
-    return p.parse_args()
+    add_batch_arguments(p, PRESETS)
+    return apply_preset(p.parse_args(), PRESETS)
 
 
 def main():
@@ -95,7 +99,8 @@ def main():
         print(f"Quality: {args.quality}/100")
 
     build_cmd = build_cmd_factory(args.quality)
-    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file, dry_run=args.dry_run)
+    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
+              dry_run=args.dry_run, jobs=args.jobs)
 
 
 if __name__ == "__main__":
