@@ -10,6 +10,8 @@
 
 </div>
 
+![audio.py converting three FLAC files to MP3](screenshot.png)
+
 ---
 
 Point a script at an input folder, pick an output format, and all matching files are converted in a single batch. ffmpeg handles all encoding; the scripts just wrap it cleanly with prompts, safety checks, and a log file written alongside the output.
