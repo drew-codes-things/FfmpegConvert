@@ -21,6 +21,11 @@ FORMAT_KEYS = list(FORMATS.keys())
 
 INPUT_EXTS = {".flac", ".mp3", ".wav", ".aac", ".opus", ".m4a", ".wma", ".ogg", ".m4b"}
 
+COVER_ART_ARGS = {
+    "m4a": ["-c:v", "copy", "-disposition:v", "attached_pic"],
+    "ogg": ["-vn"],
+}
+
 PRESETS = {
     "lossless": {"format": "flac"},
     "portable": {"format": "mp3"},
@@ -39,6 +44,7 @@ def build_cmd(ffmpeg_path, input_file, output_file):
     ]
     if bitrate:
         cmd.extend(["-b:a", bitrate])
+    cmd.extend(COVER_ART_ARGS.get(ext, []))
     cmd.append(output_file)
     return cmd
 

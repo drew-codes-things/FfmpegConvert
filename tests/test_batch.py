@@ -135,3 +135,27 @@ def test_inputs_sharing_a_name_are_both_converted(tmp_path, capsys):
     assert (target / "song.mp3").read_text() == "from flac"
     assert (target / "song_wav.mp3").read_text() == "from wav"
     assert "2 converted" in capsys.readouterr().out
+
+
+def stream_types(path):
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+                           check=True, capture_output=True, text=True)
+    return sorted(probe.stdout.split())
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="ffmpeg not installed")
+def test_real_ffmpeg_handles_cover_art_for_every_audio_format(tmp_path):
+    cover = tmp_path / "cover.png"
+    plain = tmp_path / "plain.flac"
+    with_art = tmp_path / "art.flac"
+    quiet = ["ffmpeg", "-loglevel", "error", "-f", "lavfi"]
+    subprocess.run([*quiet, "-i", "testsrc=size=65x65", "-frames:v", "1", str(cover)], check=True)
+    subprocess.run([*quiet, "-i", "anullsrc=r=44100:cl=mono", "-t", "0.2", str(plain)], check=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(plain), "-i", str(cover), "-map", "0:a", "-map", "1:v",
+                    "-c", "copy", "-disposition:v", "attached_pic", str(with_art)], check=True)
+    for extension in audio.FORMATS:
+        output = tmp_path / f"out.{extension}"
+        common.convert_one(audio.build_cmd(shutil.which("ffmpeg"), str(with_art), str(output)))
+        assert "audio" in stream_types(output), extension
+    assert stream_types(tmp_path / "out.ogg") == ["audio"]
+    assert stream_types(tmp_path / "out.m4a") == ["audio", "video"]
