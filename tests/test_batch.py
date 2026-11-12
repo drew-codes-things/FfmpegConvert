@@ -1,8 +1,10 @@
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -199,3 +201,82 @@ def test_script_exits_with_an_error_when_a_conversion_fails(tmp_path):
     result = run_script("audio.py", "-i", str(source), "-o", str(tmp_path / "out"), "-f", "mp3")
     assert "1 failed" in result.stdout
     assert result.returncode == 1
+
+
+RECORD_OUTPUT_NAME = ("import sys, shutil; shutil.copyfile(sys.argv[1], sys.argv[2]); "
+                      "open(sys.argv[2] + '.name', 'w').close()")
+
+
+def test_ffmpeg_writes_to_a_part_file_that_is_renamed_on_success(folders, capsys):
+    target, _ = run(folders, script=RECORD_OUTPUT_NAME)
+    written = sorted(name for name in os.listdir(target) if name.endswith(".name"))
+    assert written == ["a.part.mp3.name", "b.part.mp3.name", "c.part.mp3.name"]
+    assert (target / "a.mp3").read_text() == "a.wav"
+    assert not (target / "a.part.mp3").exists()
+
+
+def test_failed_conversion_leaves_no_part_file(folders, capsys):
+    target, _ = run(folders, script=FAKE_FAILURE)
+    assert sorted(os.listdir(target)) == ["log.txt", "sub"]
+    assert os.listdir(target / "sub") == []
+
+
+SLOW_CONVERT = ("import os, sys, time; open(sys.argv[2], 'w').write('partial'); "
+                "open(os.path.join(sys.argv[3], str(os.getpid())), 'w').close(); time.sleep(60)")
+
+BATCH_DRIVER = """
+import sys
+import time
+sys.path.insert(0, sys.argv[5])
+import common
+def build_cmd(ffmpeg_path, input_file, output_file):
+    return [sys.executable, "-c", sys.argv[4], input_file, output_file, sys.argv[6]]
+files = common.get_files(sys.argv[1], {".wav"})
+common.init_log(sys.argv[3], "test")
+common.run_batch("ffmpeg", build_cmd, files, sys.argv[1], sys.argv[2], "mp3", sys.argv[3], jobs=2)
+"""
+
+
+def is_running(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def wait_until(condition, seconds):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.1)
+    return condition()
+
+
+def test_sigterm_stops_ffmpeg_and_removes_partial_outputs(tmp_path):
+    source = tmp_path / "in"
+    target = tmp_path / "out"
+    pids = tmp_path / "pids"
+    for folder in (source, target, pids):
+        folder.mkdir()
+    for name in ("a.wav", "b.wav"):
+        (source / name).write_text(name)
+    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    driver = subprocess.Popen([sys.executable, "-c", BATCH_DRIVER, str(source), str(target), str(target / "log.txt"),
+                               SLOW_CONVERT, SCRIPTS_DIR, str(pids)],
+                              env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    child_pids = []
+    try:
+        assert wait_until(lambda: len(os.listdir(pids)) == 2, 20)
+        child_pids = [int(name) for name in os.listdir(pids)]
+        driver.send_signal(signal.SIGTERM)
+        driver.wait(timeout=20)
+        assert wait_until(lambda: not any(is_running(pid) for pid in child_pids), 10)
+        assert sorted(os.listdir(target)) == ["log.txt"]
+    finally:
+        for pid in child_pids:
+            if is_running(pid):
+                os.kill(pid, signal.SIGKILL)
+        if driver.poll() is None:
+            driver.kill()

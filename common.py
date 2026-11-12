@@ -2,7 +2,9 @@ import argparse
 import os
 import shlex
 import shutil
+import signal
 import subprocess
+import threading
 import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -218,17 +220,69 @@ def plan_jobs(files, input_folder, output_folder, output_ext):
     return jobs
 
 
-def convert_one(cmd):
-    result = subprocess.run(
-        cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    return result.stderr.decode("utf-8", errors="replace").strip()
+PART_SUFFIX = ".part"
+
+
+def part_path(output_file):
+    base, ext = os.path.splitext(output_file)
+    return base + PART_SUFFIX + ext
+
+
+class BatchStopped(Exception):
+    pass
+
+
+class ChildProcesses:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._processes = []
+        self._stopping = False
+
+    def start(self, cmd):
+        with self._lock:
+            if self._stopping:
+                raise BatchStopped(f"batch stopped before starting: {cmd[0]}")
+            process = subprocess.Popen(
+                cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            self._processes.append(process)
+            return process
+
+    def stop_all(self):
+        with self._lock:
+            self._stopping = True
+            for process in self._processes:
+                if process.poll() is None:
+                    process.terminate()
+
+
+def convert_one(cmd, children=None):
+    process = (children or ChildProcesses()).start(cmd)
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, cmd, stdout, stderr)
+    return stderr.decode("utf-8", errors="replace").strip()
+
+
+def raise_keyboard_interrupt(signum, frame):
+    raise KeyboardInterrupt(f"received signal {signum}")
+
+
+def treat_sigterm_as_interrupt():
+    if threading.current_thread() is not threading.main_thread():
+        return None
+    return signal.signal(signal.SIGTERM, raise_keyboard_interrupt)
+
+
+def restore_sigterm(previous_handler):
+    if previous_handler is not None:
+        signal.signal(signal.SIGTERM, previous_handler)
 
 
 def print_dry_run(ffmpeg_path, build_cmd, jobs, log_file):
     total = len(jobs)
     for idx, (_, input_file, output_file) in enumerate(jobs, 1):
-        line = " ".join(shlex.quote(c) for c in build_cmd(ffmpeg_path, input_file, output_file))
+        line = " ".join(shlex.quote(c) for c in build_cmd(ffmpeg_path, input_file, part_path(output_file)))
         print(f"[{idx}/{total}] {line}")
         write_log(log_file, f"[{idx}/{total}] DRY-RUN: {line}")
     print(f"\nDry run: {total} command(s) printed above. Nothing was converted.")
@@ -256,14 +310,15 @@ def record_result(future, done, total, output_file, log_file):
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
         write_log(log_file, f"[{done}/{total}] ERROR:\n{err}\n")
-        remove_partial_output(output_file)
+        remove_partial_output(part_path(output_file))
         return False
     except Exception as e:
         write_log(log_file, f"[{done}/{total}] UNEXPECTED: {e}\n")
-        remove_partial_output(output_file)
+        remove_partial_output(part_path(output_file))
         return False
     if stderr_text:
         write_log(log_file, stderr_text)
+    os.replace(part_path(output_file), output_file)
     write_log(log_file, f"[{done}/{total}] OK\n")
     return True
 
@@ -285,10 +340,13 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
     results = {}
     pool = ThreadPoolExecutor(max_workers=jobs)
     running = {}
-    for job in pending:
-        _, input_file, output_file = job
-        running[pool.submit(convert_one, build_cmd(ffmpeg_path, input_file, output_file))] = job
+    children = ChildProcesses()
+    previous_sigterm_handler = treat_sigterm_as_interrupt()
     try:
+        for job in pending:
+            _, input_file, output_file = job
+            running[pool.submit(convert_one, build_cmd(ffmpeg_path, input_file, part_path(output_file)),
+                                children)] = job
         for done, future in enumerate(as_completed(running), 1):
             filename, input_file, output_file = running[future]
             print_progress(done, total, filename)
@@ -299,12 +357,14 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
     except KeyboardInterrupt:
         for future in running:
             future.cancel()
+        children.stop_all()
         pool.shutdown(wait=True)
-        for future, (_, _, output_file) in running.items():
-            if not results.get(future):
-                remove_partial_output(output_file)
+        for _, _, output_file in pending:
+            remove_partial_output(part_path(output_file))
         write_log(log_file, "INTERRUPTED\n")
         raise
+    finally:
+        restore_sigterm(previous_sigterm_handler)
     pool.shutdown(wait=True)
     ok = sum(1 for succeeded in results.values() if succeeded)
 

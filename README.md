@@ -133,7 +133,7 @@ All three scripts share these flags:
 |------|-------------|
 | `--recursive` | Recurse into subfolders; the output mirrors the input folder tree |
 | `--dry-run` | Print the exact ffmpeg command for each file without converting anything |
-| `-j`, `--jobs <n>` | Convert `n` files at the same time (default 1). Ctrl+C stops every running job and removes their half-written outputs |
+| `-j`, `--jobs <n>` | Convert `n` files at the same time (default 1). Ctrl+C or SIGTERM stops every running job and removes their half-written outputs |
 | `--preset <name>` | Use a named group of settings; any flag you pass yourself still wins |
 
 ### Presets
@@ -177,6 +177,7 @@ One test runs real ffmpeg and is skipped when ffmpeg isn't installed.
 
 - Input and output folders are resolved to real paths before any conversion begins
 - The scripts exit with an error if input and output resolve to the same folder, preventing accidental overwrites
+- Each file is written as `<name>.part.<ext>` and renamed when ffmpeg finishes, so a killed or crashed run never leaves a half-written file that the next run would skip as already converted
 - ffmpeg is discovered automatically: system PATH first, then `./ffmpeg/ffmpeg`
 
 ---
