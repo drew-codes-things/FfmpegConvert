@@ -413,3 +413,12 @@ def test_dry_run_leaves_the_output_folder_and_log_alone(tmp_path):
         assert "a.part.mp3" in result.stdout
     assert (kept / "logs_audio.txt").read_text() == "previous run"
     assert not (tmp_path / "new").exists()
+
+
+def test_success_without_an_output_file_counts_as_a_failure(folders, capsys):
+    source, target = folders
+    files = common.get_files(str(source), {".wav"}, recursive=True)
+    log_file = str(target / "log.txt")
+    common.init_log(log_file, "test")
+    assert common.run_batch("ffmpeg", fake_build_cmd("pass"), files, str(source), str(target), "mp3", log_file) == 4
+    assert "0 converted, 0 skipped (already existed), 4 failed" in capsys.readouterr().out

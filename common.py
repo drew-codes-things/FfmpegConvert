@@ -325,7 +325,12 @@ def record_result(future, done, total, output_file, log_file):
         return False
     if stderr_text:
         write_log(log_file, stderr_text)
-    os.replace(part_path(output_file), output_file)
+    try:
+        os.replace(part_path(output_file), output_file)
+    except OSError as e:
+        write_log(log_file, f"[{done}/{total}] ERROR: could not move the finished file into place: {e}\n")
+        remove_partial_output(part_path(output_file))
+        return False
     write_log(log_file, f"[{done}/{total}] OK\n")
     return True
 
