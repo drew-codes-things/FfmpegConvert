@@ -191,7 +191,7 @@ def run_script(script, *arguments, cwd=None, answers=None):
     environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     stdin = {"input": answers} if answers is not None else {"stdin": subprocess.DEVNULL}
     return subprocess.run([sys.executable, os.path.join(SCRIPTS_DIR, script), *arguments], cwd=cwd, env=environment,
-                          capture_output=True, text=True, timeout=120, **stdin)
+                          capture_output=True, text=True, timeout=120, check=False, **stdin)
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
