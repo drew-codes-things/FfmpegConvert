@@ -26,6 +26,10 @@ PRESETS = {
 
 CRF_MAP = {1: 28, 2: 24, 3: 20, 4: 18, 5: 16}
 
+SUBTITLE_FORMAT = "mkv"
+
+MOV_TEXT_INPUT_EXTS = {".mp4", ".mov", ".m4v"}
+
 DEFAULT_QUALITY = 3
 
 _SOURCE_MODE = object()
@@ -52,6 +56,22 @@ def ask_bitrate_mode():
     return 3, 20
 
 
+def stream_args(input_file, output_ext):
+    video_and_audio = ["-map", "0:V", "-map", "0:a?"]
+    if output_ext != SUBTITLE_FORMAT:
+        return video_and_audio
+    has_mov_text = os.path.splitext(input_file)[1].lower() in MOV_TEXT_INPUT_EXTS
+    subtitle_codec = "srt" if has_mov_text else "copy"
+    return video_and_audio + ["-map", "0:s?", "-map", "0:t?", "-c:s", subtitle_codec, "-c:t", "copy"]
+
+
+def dropped_streams_note(output_ext):
+    if output_ext == SUBTITLE_FORMAT:
+        return None
+    return (f"{output_ext} output keeps every video and audio track; subtitle tracks, attachments and cover "
+            f"images are dropped (choose {SUBTITLE_FORMAT} to keep subtitles).")
+
+
 def build_cmd_factory(use_source_bitrate, crf):
     def build_cmd(ffmpeg_path, input_file, output_file):
         ext = os.path.splitext(output_file)[1].lstrip(".")
@@ -66,6 +86,7 @@ def build_cmd_factory(use_source_bitrate, crf):
                 video_args = ["-c:v", vcodec, "-crf", str(crf)]
         return [
             ffmpeg_path, "-y", "-i", input_file,
+            *stream_args(input_file, ext),
             *video_args,
             "-c:a", acodec,
             output_file,
@@ -156,6 +177,11 @@ def main():
         output_ext = pick_format(FORMATS, log_file)
         if not output_ext:
             sys.exit(1)
+
+    note = dropped_streams_note(output_ext)
+    if note:
+        print(f"Note: {note}")
+        write_log(log_file, f"Note: {note}")
 
     ran_from_flags = bool(args.input and args.output and args.format)
     use_source, crf = resolve_quality(args, log_file, ask_if_missing=not ran_from_flags)

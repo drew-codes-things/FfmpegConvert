@@ -307,3 +307,50 @@ def test_only_the_missing_folder_is_asked_for(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Input folder path" not in result.stdout
     assert (tmp_path / "out" / "tone.flac").exists()
+
+
+def make_two_track_mkv(tmp_path):
+    subtitles = tmp_path / "lines.srt"
+    subtitles.write_text("1\n00:00:00,000 --> 00:00:00,400\nhello\n")
+    source = tmp_path / "tracks.mkv"
+    make_media(source, "-f", "lavfi", "-i", "testsrc=size=64x64:rate=5", "-f", "lavfi", "-i", "sine=frequency=440",
+               "-f", "lavfi", "-i", "sine=frequency=880", "-i", str(subtitles), "-i", str(subtitles), "-t", "0.4",
+               "-map", "0:v", "-map", "1:a", "-map", "2:a", "-map", "3", "-map", "4", "-c:s", "srt")
+    return source
+
+
+def convert_video(source, output):
+    common.convert_one(video.build_cmd_factory(False, video.CRF_MAP[4])(shutil.which("ffmpeg"), str(source), str(output)))
+
+
+needs_ffprobe = pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+                                   reason="ffmpeg not installed")
+
+
+@needs_ffprobe
+def test_mkv_output_keeps_every_audio_and_subtitle_track(tmp_path):
+    source = make_two_track_mkv(tmp_path)
+    assert stream_types(source) == ["audio", "audio", "subtitle", "subtitle", "video"]
+    convert_video(source, tmp_path / "archive.mkv")
+    assert stream_types(tmp_path / "archive.mkv") == ["audio", "audio", "subtitle", "subtitle", "video"]
+
+
+@needs_ffprobe
+def test_mkv_output_keeps_subtitles_from_an_mp4_source(tmp_path):
+    source = tmp_path / "with_text.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(make_two_track_mkv(tmp_path)), "-map", "0", "-c:v", "copy",
+                    "-c:a", "copy", "-c:s", "mov_text", str(source)], check=True)
+    convert_video(source, tmp_path / "from_mp4.mkv")
+    assert stream_types(tmp_path / "from_mp4.mkv") == ["audio", "audio", "subtitle", "subtitle", "video"]
+
+
+@needs_ffprobe
+@pytest.mark.parametrize("extension", ["mp4", "mov", "avi", "webm"])
+def test_other_containers_keep_every_audio_track(tmp_path, extension):
+    convert_video(make_two_track_mkv(tmp_path), tmp_path / f"out.{extension}")
+    assert stream_types(tmp_path / f"out.{extension}") == ["audio", "audio", "video"]
+
+
+def test_dropped_subtitles_are_announced_for_containers_that_cannot_hold_them():
+    assert "subtitle" in video.dropped_streams_note("mp4")
+    assert video.dropped_streams_note("mkv") is None
