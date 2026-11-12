@@ -3,7 +3,7 @@ import sys
 import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
-    get_files, pick_format, run_batch, validate_io_folders,
+    get_files, pick_format, run_batch,
     add_batch_arguments, apply_preset, exit_status
 )
 
@@ -25,6 +25,8 @@ PRESETS = {
 }
 
 CRF_MAP = {1: 28, 2: 24, 3: 20, 4: 18, 5: 16}
+
+DEFAULT_QUALITY = 3
 
 _SOURCE_MODE = object()
 
@@ -87,7 +89,7 @@ def parse_args():
     return apply_preset(p.parse_args(), PRESETS)
 
 
-def resolve_quality(args, log_file):
+def resolve_quality(args, log_file, ask_if_missing):
     if args.crf is not None:
         write_log(log_file, f"Bitrate mode: explicit CRF {args.crf}")
         print(f"Using CRF {args.crf}.")
@@ -104,6 +106,11 @@ def resolve_quality(args, log_file):
             print(f"Using quality {raw} (CRF {crf}).")
             return False, crf
         print("Invalid --quality; falling back to prompt.")
+    elif not ask_if_missing:
+        crf = CRF_MAP[DEFAULT_QUALITY]
+        write_log(log_file, f"Bitrate mode: default quality {DEFAULT_QUALITY} (CRF {crf})")
+        print(f"Using quality {DEFAULT_QUALITY} (CRF {crf}), the default; pass --quality or --crf to change it.")
+        return False, crf
     q, crf = ask_bitrate_mode()
     use_source = (q is _SOURCE_MODE)
     if use_source:
@@ -119,10 +126,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     args = parse_args()
 
-    if args.input and args.output:
-        input_folder, output_folder = validate_io_folders(args.input, args.output)
-    else:
-        input_folder, output_folder = prompt_folders()
+    input_folder, output_folder = prompt_folders(args.input, args.output)
     if not input_folder:
         sys.exit(1)
 
@@ -153,7 +157,8 @@ def main():
         if not output_ext:
             sys.exit(1)
 
-    use_source, crf = resolve_quality(args, log_file)
+    ran_from_flags = bool(args.input and args.output and args.format)
+    use_source, crf = resolve_quality(args, log_file, ask_if_missing=not ran_from_flags)
 
     build_cmd = build_cmd_factory(use_source, crf)
     failure_count = run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,

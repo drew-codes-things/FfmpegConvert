@@ -126,12 +126,10 @@ def validate_io_folders(input_folder, output_folder):
     return input_folder, output_folder
 
 
-def prompt_folders(output_folder_override=None):
-    input_folder = input("Input folder path: ")
-    if output_folder_override:
-        output_folder = output_folder_override
-        print(f"Output folder path: {clean_path(output_folder)} (from override)")
-    else:
+def prompt_folders(input_folder=None, output_folder=None):
+    if not input_folder:
+        input_folder = input("Input folder path: ")
+    if not output_folder:
         output_folder = input("Output folder path: ")
     return validate_io_folders(input_folder, output_folder)
 

@@ -3,7 +3,7 @@ import sys
 import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
-    get_files, pick_format, run_batch, validate_io_folders,
+    get_files, pick_format, run_batch,
     add_batch_arguments, apply_preset, exit_status
 )
 
@@ -75,10 +75,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     args = parse_args()
 
-    if args.input and args.output:
-        input_folder, output_folder = validate_io_folders(args.input, args.output)
-    else:
-        input_folder, output_folder = prompt_folders()
+    input_folder, output_folder = prompt_folders(args.input, args.output)
     if not input_folder:
         sys.exit(1)
 

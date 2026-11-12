@@ -187,10 +187,11 @@ def test_run_batch_returns_the_number_of_failures(folders, capsys):
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def run_script(script, *arguments, cwd=None):
+def run_script(script, *arguments, cwd=None, answers=None):
     environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    stdin = {"input": answers} if answers is not None else {"stdin": subprocess.DEVNULL}
     return subprocess.run([sys.executable, os.path.join(SCRIPTS_DIR, script), *arguments], cwd=cwd, env=environment,
-                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+                          capture_output=True, text=True, timeout=120, **stdin)
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
@@ -280,3 +281,29 @@ def test_sigterm_stops_ffmpeg_and_removes_partial_outputs(tmp_path):
                 os.kill(pid, signal.SIGKILL)
         if driver.poll() is None:
             driver.kill()
+
+
+def make_media(path, *source_arguments):
+    subprocess.run(["ffmpeg", "-loglevel", "error", *source_arguments, str(path)], check=True)
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_video_run_with_folders_and_format_needs_no_terminal(tmp_path):
+    source = tmp_path / "in"
+    source.mkdir()
+    make_media(source / "clip.mp4", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=5", "-t", "0.4")
+    result = run_script("video.py", "-i", str(source), "-o", str(tmp_path / "out"), "-f", "mkv")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Using quality 3 (CRF 20)" in result.stdout
+    assert (tmp_path / "out" / "clip.mkv").exists()
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_only_the_missing_folder_is_asked_for(tmp_path):
+    source = tmp_path / "in"
+    source.mkdir()
+    make_media(source / "tone.wav", "-f", "lavfi", "-i", "sine=duration=0.2")
+    result = run_script("audio.py", "-i", str(source), "-f", "flac", answers=str(tmp_path / "out") + "\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Input folder path" not in result.stdout
+    assert (tmp_path / "out" / "tone.flac").exists()

@@ -160,7 +160,7 @@ Video encoding already uses several CPU cores per file, so `-j 2` is usually eno
 
 `video.py` adds `--crf <n>` (exact CRF, overrides `--quality` and presets) and `--quality s|1-5`.
 `image.py` adds `--quality 1-100` (higher = better) for `jpg`/`webp`/`avif`; lossless formats ignore it.
-`audio.py`, `video.py`, and `image.py` all accept `-i/--input`, `-o/--output`, and `-f/--format` to skip the prompts.
+`audio.py`, `video.py`, and `image.py` all accept `-i/--input`, `-o/--output`, and `-f/--format`; each one skips its own prompt. When all three are given, `video.py` uses quality 3 (CRF 20) unless `--quality`, `--crf` or `--preset` says otherwise, so a fully flagged run never waits for input.
 
 ### Tests
 
