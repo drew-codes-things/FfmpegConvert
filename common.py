@@ -93,7 +93,7 @@ def get_files(folder, extensions, recursive=False):
     return files
 
 
-def validate_io_folders(input_folder, output_folder):
+def validate_io_folders(input_folder, output_folder, create_output=True):
     input_folder = clean_path(input_folder)
     output_folder = clean_path(output_folder)
     if not input_folder or not os.path.isdir(input_folder):
@@ -125,18 +125,22 @@ def validate_io_folders(input_folder, output_folder):
             "Please choose folders that do not contain each other."
         )
         return None, None
-    if not os.path.isdir(output_folder):
+    if create_output and not os.path.isdir(output_folder):
         print(f"Creating output folder: {output_folder}")
         os.makedirs(output_folder, exist_ok=True)
     return input_folder, output_folder
 
 
-def prompt_folders(input_folder=None, output_folder=None):
+def prompt_folders(input_folder=None, output_folder=None, create_output=True):
     if not input_folder:
         input_folder = input("Input folder path: ")
     if not output_folder:
         output_folder = input("Output folder path: ")
-    return validate_io_folders(input_folder, output_folder)
+    return validate_io_folders(input_folder, output_folder, create_output)
+
+
+def log_path(output_folder, log_name, dry_run):
+    return os.devnull if dry_run else os.path.join(output_folder, log_name)
 
 
 def pick_format(formats, log_file):

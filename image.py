@@ -2,7 +2,7 @@ import os
 import sys
 import argparse
 from common import (
-    find_ffmpeg, init_log, write_log, prompt_folders,
+    find_ffmpeg, init_log, write_log, prompt_folders, log_path,
     get_files, pick_format, run_batch,
     add_batch_arguments, apply_preset, exit_status
 )
@@ -76,11 +76,11 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     args = parse_args()
 
-    input_folder, output_folder = prompt_folders(args.input, args.output)
+    input_folder, output_folder = prompt_folders(args.input, args.output, create_output=not args.dry_run)
     if not input_folder:
         sys.exit(1)
 
-    log_file = os.path.join(output_folder, "logs_image.txt")
+    log_file = log_path(output_folder, "logs_image.txt", args.dry_run)
     init_log(log_file, "Batch Image Converter")
 
     ffmpeg_path = find_ffmpeg(script_dir)

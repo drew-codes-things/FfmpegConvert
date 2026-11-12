@@ -397,3 +397,19 @@ def test_image_names_holding_a_printf_pattern_convert(tmp_path, source_name):
         output = tmp_path / f"{os.path.splitext(source_name)[0]}.{extension}"
         common.convert_one(image.build_cmd_factory(None)(shutil.which("ffmpeg"), str(source), str(output)))
         assert output.stat().st_size > 0, extension
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_dry_run_leaves_the_output_folder_and_log_alone(tmp_path):
+    source = tmp_path / "in"
+    kept = tmp_path / "kept"
+    source.mkdir()
+    kept.mkdir()
+    (source / "a.wav").write_text("a")
+    (kept / "logs_audio.txt").write_text("previous run")
+    for target in (kept, tmp_path / "new"):
+        result = run_script("audio.py", "-i", str(source), "-o", str(target), "-f", "mp3", "--dry-run")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "a.part.mp3" in result.stdout
+    assert (kept / "logs_audio.txt").read_text() == "previous run"
+    assert not (tmp_path / "new").exists()

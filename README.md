@@ -134,7 +134,7 @@ All three scripts share these flags:
 | Flag | Description |
 |------|-------------|
 | `--recursive` | Recurse into subfolders; the output mirrors the input folder tree |
-| `--dry-run` | Print the exact ffmpeg command for each file without converting anything |
+| `--dry-run` | Print the exact ffmpeg command for each file without converting anything; it creates no output folder and leaves the previous log alone |
 | `-j`, `--jobs <n>` | Convert `n` files at the same time (default 1). Ctrl+C or SIGTERM stops every running job and removes their half-written outputs |
 | `--preset <name>` | Use a named group of settings; any flag you pass yourself still wins |
 
