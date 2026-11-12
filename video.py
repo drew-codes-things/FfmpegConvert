@@ -4,7 +4,7 @@ import argparse
 from common import (
     find_ffmpeg, init_log, write_log, prompt_folders,
     get_files, pick_format, run_batch, validate_io_folders,
-    add_batch_arguments, apply_preset
+    add_batch_arguments, apply_preset, exit_status
 )
 
 FORMATS = {
@@ -156,8 +156,9 @@ def main():
     use_source, crf = resolve_quality(args, log_file)
 
     build_cmd = build_cmd_factory(use_source, crf)
-    run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
-              dry_run=args.dry_run, jobs=args.jobs)
+    failure_count = run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output_ext, log_file,
+                              dry_run=args.dry_run, jobs=args.jobs)
+    sys.exit(exit_status(failure_count))
 
 
 if __name__ == "__main__":

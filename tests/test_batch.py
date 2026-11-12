@@ -171,3 +171,31 @@ def test_real_ffmpeg_turns_an_animated_gif_into_a_still_image(tmp_path):
         output = tmp_path / f"still.{extension}"
         common.convert_one(image.build_cmd_factory(None)(shutil.which("ffmpeg"), str(animation), str(output)))
         assert output.stat().st_size > 0, extension
+
+
+def test_run_batch_returns_the_number_of_failures(folders, capsys):
+    source, target = folders
+    files = common.get_files(str(source), {".wav"}, recursive=True)
+    log_file = str(target / "log.txt")
+    common.init_log(log_file, "test")
+    assert common.run_batch("ffmpeg", fake_build_cmd(FAKE_FAILURE), files, str(source), str(target), "mp3", log_file) == 4
+    assert common.run_batch("ffmpeg", fake_build_cmd(FAKE_CONVERT), files, str(source), str(target), "mp3", log_file) == 0
+
+
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def run_script(script, *arguments, cwd=None):
+    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    return subprocess.run([sys.executable, os.path.join(SCRIPTS_DIR, script), *arguments], cwd=cwd, env=environment,
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_script_exits_with_an_error_when_a_conversion_fails(tmp_path):
+    source = tmp_path / "in"
+    source.mkdir()
+    (source / "broken.wav").write_text("not audio")
+    result = run_script("audio.py", "-i", str(source), "-o", str(tmp_path / "out"), "-f", "mp3")
+    assert "1 failed" in result.stdout
+    assert result.returncode == 1

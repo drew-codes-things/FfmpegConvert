@@ -274,7 +274,7 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
     planned = plan_jobs(files, input_folder, output_folder, output_ext)
     if dry_run:
         print_dry_run(ffmpeg_path, build_cmd, planned, log_file)
-        return
+        return 0
 
     pending, skipped = split_existing(planned, log_file)
     total = len(pending)
@@ -316,3 +316,8 @@ def run_batch(ffmpeg_path, build_cmd, files, input_folder, output_folder, output
             print(f"  - {f}")
     write_log(log_file, f"\nFinished: {datetime.datetime.now().isoformat(sep=' ', timespec='seconds')}")
     write_log(log_file, f"Result: {ok} converted, {skipped} skipped, {len(failed)} failed")
+    return len(failed)
+
+
+def exit_status(failure_count):
+    return 1 if failure_count else 0
