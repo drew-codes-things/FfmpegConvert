@@ -8,6 +8,7 @@ import pytest
 
 import audio
 import common
+import image
 import video
 
 FAKE_CONVERT = "import sys, shutil; shutil.copyfile(sys.argv[1], sys.argv[2])"
@@ -159,3 +160,14 @@ def test_real_ffmpeg_handles_cover_art_for_every_audio_format(tmp_path):
         assert "audio" in stream_types(output), extension
     assert stream_types(tmp_path / "out.ogg") == ["audio"]
     assert stream_types(tmp_path / "out.m4a") == ["audio", "video"]
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_real_ffmpeg_turns_an_animated_gif_into_a_still_image(tmp_path):
+    animation = tmp_path / "anim.gif"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=5",
+                    "-frames:v", "5", str(animation)], check=True)
+    for extension in ("jpg", "png", "bmp", "tiff", "webp"):
+        output = tmp_path / f"still.{extension}"
+        common.convert_one(image.build_cmd_factory(None)(shutil.which("ffmpeg"), str(animation), str(output)))
+        assert output.stat().st_size > 0, extension

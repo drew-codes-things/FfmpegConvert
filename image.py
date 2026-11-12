@@ -16,6 +16,8 @@ FORMATS = {
     "avif": "libaom-av1",
 }
 
+STILL_ONLY_FORMATS = {"jpg", "png", "bmp", "tiff"}
+
 INPUT_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".gif", ".ppm", ".tga", ".avif"}
 
 PRESETS = {
@@ -30,6 +32,8 @@ def build_cmd_factory(quality):
         ext = os.path.splitext(output_file)[1].lstrip(".")
         codec = FORMATS[ext]
         cmd = [ffmpeg_path, "-y", "-i", input_file, "-vcodec", codec]
+        if ext in STILL_ONLY_FORMATS:
+            cmd += ["-frames:v", "1"]
         if quality is not None:
             if codec == "mjpeg":
                 qv = max(2, min(31, round(31 - (quality / 100) * 29)))
