@@ -81,7 +81,7 @@ Batch-converts video files with a selectable quality level.
 
 | Option | CRF | Notes |
 |--------|-----|-------|
-| `s` | 18 | Source bitrate mode, near-lossless |
+| `s` | 18 | Same settings as `4`; it does not read the source's bitrate |
 | `1` | 28 | Smallest file |
 | `2` | 24 | |
 | `3` | 20 | Balanced (default) |
@@ -171,7 +171,7 @@ pip install pytest
 python -m pytest tests
 ```
 
-One test runs real ffmpeg and is skipped when ffmpeg isn't installed.
+The tests that run real ffmpeg (and ffprobe) are skipped when it isn't installed.
 
 ---
 
@@ -180,7 +180,7 @@ One test runs real ffmpeg and is skipped when ffmpeg isn't installed.
 - Input and output folders are resolved to real paths before any conversion begins
 - The scripts exit with an error if input and output resolve to the same folder, preventing accidental overwrites
 - Each file is written as `<name>.part.<ext>` and renamed when ffmpeg finishes, so a killed or crashed run never leaves a half-written file that the next run would skip as already converted
-- ffmpeg is discovered automatically: system PATH first, then `./ffmpeg/ffmpeg`
+- ffmpeg is discovered automatically: `./ffmpeg/ffmpeg` (or `ffmpeg.exe`) next to the scripts first, then the system PATH
 
 ---
 
