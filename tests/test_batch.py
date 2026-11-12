@@ -354,3 +354,20 @@ def test_other_containers_keep_every_audio_track(tmp_path, extension):
 def test_dropped_subtitles_are_announced_for_containers_that_cannot_hold_them():
     assert "subtitle" in video.dropped_streams_note("mp4")
     assert video.dropped_streams_note("mkv") is None
+
+
+def video_format(path):
+    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=pix_fmt,width,height", "-of", "csv=p=0", str(path)],
+                           check=True, capture_output=True, text=True)
+    return probe.stdout.strip()
+
+
+@needs_ffprobe
+@pytest.mark.parametrize("pixel_format", ["yuv444p", "yuv420p10le"])
+def test_h264_output_is_widely_playable_from_odd_sources(tmp_path, pixel_format):
+    source = tmp_path / f"{pixel_format}.mkv"
+    make_media(source, "-f", "lavfi", "-i", "testsrc=size=65x33:rate=5", "-t", "0.4", "-c:v", "ffv1",
+               "-pix_fmt", pixel_format)
+    convert_video(source, tmp_path / "phone.mp4")
+    assert video_format(tmp_path / "phone.mp4") == "64,32,yuv420p"

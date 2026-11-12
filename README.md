@@ -88,7 +88,7 @@ Batch-converts video files with a selectable quality level.
 | `4` | 18 | |
 | `5` | 16 | Best quality |
 
-For WebM output, VP9 uses `-b:v 0 -crf <value>` (constrained quality mode). A log is written to `<output>/logs_video.txt`.
+For WebM output, VP9 uses `-b:v 0 -crf <value>` (constrained quality mode). H.264 output is always 8-bit 4:2:0 (`-pix_fmt yuv420p`) with the width and height rounded down to even numbers, so it plays on phones and browsers and odd-sized sources convert. A log is written to `<output>/logs_video.txt`.
 
 Every video and audio track is kept. `mkv` output also keeps every subtitle track and attachment (MP4 text subtitles are converted to SRT); the other formats drop subtitles, attachments and cover images, and the script says so before it starts.
 

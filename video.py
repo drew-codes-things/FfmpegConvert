@@ -30,6 +30,8 @@ SUBTITLE_FORMAT = "mkv"
 
 MOV_TEXT_INPUT_EXTS = {".mp4", ".mov", ".m4v"}
 
+H264_PLAYABLE_ARGS = ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p"]
+
 DEFAULT_QUALITY = 3
 
 _SOURCE_MODE = object()
@@ -84,6 +86,8 @@ def build_cmd_factory(use_source_bitrate, crf):
                 video_args = ["-c:v", vcodec, "-b:v", "0", "-crf", str(crf)]
             else:
                 video_args = ["-c:v", vcodec, "-crf", str(crf)]
+        if not is_vp9:
+            video_args += H264_PLAYABLE_ARGS
         return [
             ffmpeg_path, "-y", "-i", input_file,
             *stream_args(input_file, ext),
