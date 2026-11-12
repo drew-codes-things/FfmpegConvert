@@ -371,3 +371,18 @@ def test_h264_output_is_widely_playable_from_odd_sources(tmp_path, pixel_format)
                "-pix_fmt", pixel_format)
     convert_video(source, tmp_path / "phone.mp4")
     assert video_format(tmp_path / "phone.mp4") == "64,32,yuv420p"
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_relative_folders_starting_with_a_dash_convert(tmp_path):
+    source = tmp_path / "-in"
+    source.mkdir()
+    make_media(source / "tone.wav", "-f", "lavfi", "-i", "sine=duration=0.2")
+    result = run_script("audio.py", "--input=-in", "--output=-out", "-f", "flac", cwd=tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "-out" / "tone.flac").exists()
+
+
+def test_an_empty_folder_answer_is_refused(tmp_path):
+    assert common.validate_io_folders(str(tmp_path), "  ") == (None, None)
+    assert common.validate_io_folders("", str(tmp_path / "out")) == (None, None)

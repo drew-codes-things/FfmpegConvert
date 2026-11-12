@@ -96,9 +96,14 @@ def get_files(folder, extensions, recursive=False):
 def validate_io_folders(input_folder, output_folder):
     input_folder = clean_path(input_folder)
     output_folder = clean_path(output_folder)
-    if not os.path.isdir(input_folder):
+    if not input_folder or not os.path.isdir(input_folder):
         logger.error(f"Input folder not found: {input_folder}")
         return None, None
+    if not output_folder:
+        logger.error("No output folder given")
+        return None, None
+    input_folder = os.path.abspath(input_folder)
+    output_folder = os.path.abspath(output_folder)
     real_in  = os.path.realpath(input_folder)
     real_out = os.path.realpath(output_folder)
     if real_in == real_out:
