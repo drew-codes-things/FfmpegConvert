@@ -386,3 +386,14 @@ def test_relative_folders_starting_with_a_dash_convert(tmp_path):
 def test_an_empty_folder_answer_is_refused(tmp_path):
     assert common.validate_io_folders(str(tmp_path), "  ") == (None, None)
     assert common.validate_io_folders("", str(tmp_path / "out")) == (None, None)
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+@pytest.mark.parametrize("source_name", ["100%d.png", "50%.jpg", "frame%03d.tga", "spin%d.gif"])
+def test_image_names_holding_a_printf_pattern_convert(tmp_path, source_name):
+    source = tmp_path / source_name
+    make_media(source, "-f", "lavfi", "-i", "testsrc=size=32x32", "-frames:v", "1", "-update", "1")
+    for extension in image.FORMATS:
+        output = tmp_path / f"{os.path.splitext(source_name)[0]}.{extension}"
+        common.convert_one(image.build_cmd_factory(None)(shutil.which("ffmpeg"), str(source), str(output)))
+        assert output.stat().st_size > 0, extension

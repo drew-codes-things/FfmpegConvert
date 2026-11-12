@@ -18,6 +18,10 @@ FORMATS = {
 
 STILL_ONLY_FORMATS = {"jpg", "png", "bmp", "tiff"}
 
+LITERAL_NAME_MUXERS = {"webp": ["-f", "webp"]}
+
+IMAGE2_DEMUXER_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".ppm", ".tga"}
+
 INPUT_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".gif", ".ppm", ".tga", ".avif"}
 
 PRESETS = {
@@ -27,13 +31,20 @@ PRESETS = {
 }
 
 
+def literal_name_input_args(input_file):
+    has_pattern_characters = "%" in os.path.basename(input_file)
+    if has_pattern_characters and os.path.splitext(input_file)[1].lower() in IMAGE2_DEMUXER_EXTS:
+        return ["-f", "image2", "-pattern_type", "none"]
+    return []
+
+
 def build_cmd_factory(quality):
     def build_cmd(ffmpeg_path, input_file, output_file):
         ext = os.path.splitext(output_file)[1].lstrip(".")
         codec = FORMATS[ext]
-        cmd = [ffmpeg_path, "-y", "-i", input_file, "-vcodec", codec]
+        cmd = [ffmpeg_path, "-y", *literal_name_input_args(input_file), "-i", input_file, "-vcodec", codec]
         if ext in STILL_ONLY_FORMATS:
-            cmd += ["-frames:v", "1"]
+            cmd += ["-frames:v", "1", "-update", "1"]
         if quality is not None:
             if codec == "mjpeg":
                 qv = max(2, min(31, round(31 - (quality / 100) * 29)))
@@ -43,6 +54,7 @@ def build_cmd_factory(quality):
             elif codec == "libaom-av1":
                 crf = max(0, min(63, round((100 - quality) / 100 * 63)))
                 cmd += ["-crf", str(crf)]
+        cmd += LITERAL_NAME_MUXERS.get(ext, [])
         cmd.append(output_file)
         return cmd
     return build_cmd
