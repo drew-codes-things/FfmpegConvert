@@ -194,12 +194,27 @@ def apply_preset(args, presets):
     return args
 
 
+def unused_output_path(output_folder, filename, output_ext, taken):
+    base, source_ext = os.path.splitext(filename)
+    candidate = os.path.join(output_folder, base + "." + output_ext)
+    if candidate not in taken:
+        return candidate
+    stem = f"{base}_{source_ext.lstrip('.')}"
+    candidate = os.path.join(output_folder, stem + "." + output_ext)
+    copy_number = 2
+    while candidate in taken:
+        candidate = os.path.join(output_folder, f"{stem}_{copy_number}.{output_ext}")
+        copy_number += 1
+    return candidate
+
+
 def plan_jobs(files, input_folder, output_folder, output_ext):
     jobs = []
+    taken = set()
     for filename in files:
-        base = os.path.splitext(filename)[0]
-        jobs.append((filename, os.path.join(input_folder, filename),
-                     os.path.join(output_folder, base + "." + output_ext)))
+        output_file = unused_output_path(output_folder, filename, output_ext, taken)
+        taken.add(output_file)
+        jobs.append((filename, os.path.join(input_folder, filename), output_file))
     return jobs
 
 

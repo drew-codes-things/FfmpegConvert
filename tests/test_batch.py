@@ -112,3 +112,26 @@ def test_real_ffmpeg_audio_conversion_in_parallel(tmp_path, capsys):
     common.run_batch(shutil.which("ffmpeg"), audio.build_cmd, files, str(source), str(target), "flac", log_file, jobs=3)
     assert sorted(os.listdir(target)) == ["log.txt", "tone0.flac", "tone1.flac", "tone2.flac"]
     assert "3 converted" in capsys.readouterr().out
+
+
+def test_inputs_sharing_a_name_get_separate_outputs():
+    planned = common.plan_jobs(["song.flac", "song.wav", os.path.join("sub", "song.wav")], "in", "out", "mp3")
+    outputs = [output_file for _, _, output_file in planned]
+    assert outputs == [os.path.join("out", "song.mp3"), os.path.join("out", "song_wav.mp3"),
+                       os.path.join("out", "sub", "song.mp3")]
+
+
+def test_inputs_sharing_a_name_are_both_converted(tmp_path, capsys):
+    source = tmp_path / "in"
+    target = tmp_path / "out"
+    source.mkdir()
+    target.mkdir()
+    (source / "song.flac").write_text("from flac")
+    (source / "song.wav").write_text("from wav")
+    files = common.get_files(str(source), {".flac", ".wav"})
+    log_file = str(target / "log.txt")
+    common.init_log(log_file, "test")
+    common.run_batch("ffmpeg", fake_build_cmd(FAKE_CONVERT), files, str(source), str(target), "mp3", log_file, jobs=2)
+    assert (target / "song.mp3").read_text() == "from flac"
+    assert (target / "song_wav.mp3").read_text() == "from wav"
+    assert "2 converted" in capsys.readouterr().out
